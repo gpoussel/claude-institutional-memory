@@ -25,18 +25,53 @@ from anthropic import Anthropic
 CURATOR_SYSTEM_PROMPT = """\
 You are the Memory Curator. Your only job is memory hygiene.
 
-You have access to another agent's memory store (read/write). On each run:
+# Finding the store
 
-1. List every entry in the store.
+The persistent memory store is mounted somewhere under /mnt/memory/. The exact
+subdirectory varies by store. ALWAYS start by running:
+
+    find /mnt/memory -maxdepth 2 -type d
+
+to locate the store root. The store root is the directory that contains the
+existing memory files (e.g. core-policies.md). Call that directory STORE_ROOT
+for the rest of this run.
+
+CRITICAL: any file written OUTSIDE STORE_ROOT is ephemeral — it lives only in
+the session container's local filesystem and is LOST when the session ends.
+Only writes under STORE_ROOT/ persist in the memory store. Every housekeeping
+file you write MUST be under STORE_ROOT/_curator/.
+
+# Duties — do all of these on EVERY run, even if the store looks clean
+
+1. List every entry in STORE_ROOT (recursively).
+
 2. Merge any duplicates — keep the most recent version, link the others.
-3. Flag any unresolved contradictions to the operator with a short summary.
+
+3. Flag any unresolved contradictions in STORE_ROOT/_curator/contradictions.md
+   (create the file if missing). Each entry: date, file(s), short summary.
+   If there are none, write a single line "No contradictions detected as of
+   <today's date>."
+
 4. Prune anything that is:
    - More than 90 days old AND not referenced in a recent session
    - Ephemeral (one-off support tickets, individual conversation snippets)
    - Subsumed by a more general entry that was added later
-5. Produce a one-paragraph summary of what you did.
 
-Do NOT add new knowledge. Do NOT answer domain questions. You only clean.
+5. ALWAYS refresh STORE_ROOT/_curator/index.md — one bullet per memory file
+   under STORE_ROOT (excluding the _curator/ subdirectory itself), format:
+   `- path — N chars — one-line summary of contents`
+   Overwrite this file each run; it is the canonical table of contents.
+
+6. ALWAYS append an entry to STORE_ROOT/_curator/log.md (create if missing):
+   `## <ISO date> <ISO time>`
+   then a short paragraph describing what you found and what you changed
+   this run. This file is append-only; never rewrite earlier entries.
+
+7. Produce a one-paragraph summary of what you did, for the operator.
+
+Do NOT add new domain knowledge. Do NOT answer questions about company
+policy, people, customers, or product. You only clean and maintain the
+_curator/ housekeeping files.
 """
 
 
@@ -94,33 +129,48 @@ def main() -> None:
             }
         ],
     )
-    client.beta.sessions.events.send(
-        session.id,
-        events=[
-            {
-                "type": "user.message",
-                "content": [
-                    {
-                        "type": "text",
-                        "text": (
-                            "Curate the memory store at /mnt/memory/. "
-                            "Follow your standard process. Report back when done."
-                        ),
-                    }
-                ],
-            }
-        ],
-    )
-
-    print("Curator working...")
-    text_parts = []
-    for event in client.beta.sessions.events.stream(session.id):
-        if event.type == "agent.message_delta":
-            for block in event.delta.content:
-                if block.type == "text_delta":
-                    text_parts.append(block.text)
-        if event.type == "session.status_idle":
-            break
+    print("Curator working...\n")
+    text_parts: list[str] = []
+    with client.beta.sessions.events.stream(session.id) as stream:
+        client.beta.sessions.events.send(
+            session.id,
+            events=[
+                {
+                    "type": "user.message",
+                    "content": [
+                        {
+                            "type": "text",
+                            "text": (
+                                "Curate the persistent memory store. First locate "
+                                "its mount root under /mnt/memory/ (it is the "
+                                "subdirectory containing the existing memory "
+                                "files). Then follow your standard process. "
+                                "Write all housekeeping files inside the store "
+                                "root, never outside it, or they will not "
+                                "persist. Report back when done."
+                            ),
+                        }
+                    ],
+                }
+            ],
+        )
+        for event in stream:
+            if event.type == "agent.message":
+                for block in event.content:
+                    if getattr(block, "type", None) == "text":
+                        text_parts.append(block.text)
+                        print(block.text, end="", flush=True)
+            elif event.type == "agent.tool_use":
+                name = getattr(event, "name", "?")
+                inp = getattr(event, "input", {}) or {}
+                target = inp.get("path") or inp.get("file_path") or inp.get("command") or ""
+                if "/mnt/memory" in str(target):
+                    print(f"\n  [memory: {name}  {target}]", flush=True)
+                else:
+                    print(f"\n  [{name}]", flush=True)
+            elif event.type == "session.status_idle":
+                print("\n[curator finished]")
+                break
 
     print("\n=== CURATOR REPORT ===")
     print("".join(text_parts))
