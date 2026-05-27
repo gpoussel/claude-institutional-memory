@@ -16,6 +16,7 @@ import os
 from pathlib import Path
 
 from anthropic import Anthropic
+import stretch_memory_curator
 
 
 TEST_QUESTION = (
@@ -32,7 +33,7 @@ def load_docs_as_context(docs_dir: Path) -> str:
     blocks = []
     for path in sorted(docs_dir.glob("*.md")):
         print(f"  including {path.name}")
-        blocks.append(f"=====  DOCUMENT: {path.name}  =====\n{path.read_text(encoding='utf-8')}")
+        blocks.append(f"=====  DOCUMENT: {path.name}  =====\n{path.read_text()}")
     return "\n\n".join(blocks)
 
 
@@ -119,10 +120,13 @@ def main() -> None:
     OUTPUT_DIR.mkdir(exist_ok=True)
     out = OUTPUT_DIR / "session1.txt"
     out.write_text(
-        f"=== SESSION 1 ===\nQuestion: {TEST_QUESTION}\n\n--- ANSWER ---\n{final_text}\n",
-        encoding="utf-8",
+        f"=== SESSION 1 ===\nQuestion: {TEST_QUESTION}\n\n--- ANSWER ---\n{final_text}\n"
     )
     print(f"\nSaved to {out}")
+
+    print("\n--- Running memory curator ---")
+    stretch_memory_curator.main()
+
     print(f"\nInspect what the agent remembered:  python inspect_memory.py")
     print(f"Then run run_session_2.py.")
 

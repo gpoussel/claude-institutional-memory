@@ -75,8 +75,25 @@ def main() -> None:
         curator_path.write_text(curator_id)
         print(f"Curator agent created: {curator_id}")
 
+    environment_id = Path(".environment_id").read_text().strip()
+    memory_store_id = Path(".memory_store_id").read_text().strip()
+
     # Run a curation session. In production this would be a scheduled Routine.
-    session = client.beta.sessions.create(agent=curator_id)
+    session = client.beta.sessions.create(
+        agent=curator_id,
+        environment_id=environment_id,
+        resources=[
+            {
+                "type": "memory_store",
+                "memory_store_id": memory_store_id,
+                "access": "read_write",
+                "instructions": (
+                    "Curate this memory store — merge duplicates, resolve "
+                    "contradictions, prune stale or ephemeral entries."
+                ),
+            }
+        ],
+    )
     client.beta.sessions.events.send(
         session.id,
         events=[
@@ -86,7 +103,7 @@ def main() -> None:
                     {
                         "type": "text",
                         "text": (
-                            f"Curate the memory store of agent {main_agent_id}. "
+                            "Curate the memory store at /mnt/memory/. "
                             "Follow your standard process. Report back when done."
                         ),
                     }

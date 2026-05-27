@@ -16,6 +16,7 @@ import os
 from pathlib import Path
 
 from anthropic import Anthropic
+import stretch_memory_curator
 
 
 # Match session 1
@@ -33,7 +34,7 @@ def load_docs_as_context(docs_dir: Path) -> str:
     blocks = []
     for path in sorted(docs_dir.glob("*.md")):
         print(f"  including {path.name}")
-        blocks.append(f"=====  DOCUMENT: {path.name}  =====\n{path.read_text(encoding='utf-8')}")
+        blocks.append(f"=====  DOCUMENT: {path.name}  =====\n{path.read_text()}")
     return "\n\n".join(blocks)
 
 
@@ -124,10 +125,13 @@ def main() -> None:
     OUTPUT_DIR.mkdir(exist_ok=True)
     out = OUTPUT_DIR / "session2.txt"
     out.write_text(
-        f"=== SESSION 2 ===\nQuestion: {TEST_QUESTION}\n\n--- ANSWER ---\n{final_text}\n",
-        encoding="utf-8",
+        f"=== SESSION 2 ===\nQuestion: {TEST_QUESTION}\n\n--- ANSWER ---\n{final_text}\n"
     )
     print(f"\nSaved to {out}")
+
+    print("\n--- Running memory curator ---")
+    stretch_memory_curator.main()
+
     print(f"\nDiff outputs/session1.txt and outputs/session2.txt — the demo lives there.")
     print(f"Inspect updated memory:  python inspect_memory.py")
 

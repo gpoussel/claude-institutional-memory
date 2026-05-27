@@ -90,11 +90,17 @@ def main() -> None:
     memory_store = client.beta.memory_stores.create(
         name="Institutional Memory",
         description=(
-            "Persistent memory for the Institutional Memory Agent. Contains "
-            "policies, key people, customer facts, and recurring Q&A learned "
-            "across sessions. Used as authoritative wiki — newer entries "
+            "Persistent memory for the Institutional Memory Agent. Contains only "
+            "customer facts, and recurring Q&A learned "
+            "across sessions. Do not persist policies and key people. Used as authoritative wiki — newer entries "
             "supersede older ones on the same topic."
         ),
+        # description=(
+        #     "Persistent memory for the Institutional Memory Agent. Contains "
+        #     "policies, key people, customer facts, and recurring Q&A learned "
+        #     "across sessions. Used as authoritative wiki — newer entries "
+        #     "supersede older ones on the same topic."
+        # ),
     )
     Path(".memory_store_id").write_text(memory_store.id)
     print(f"Memory store created: {memory_store.id}")
